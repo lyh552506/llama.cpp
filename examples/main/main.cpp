@@ -1,11 +1,13 @@
 #include "arg.h"
 #include "common.h"
 #include "console.h"
+#include "llama-impl.h"
 #include "log.h"
 #include "sampling.h"
 #include "llama.h"
 #include "chat.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -38,8 +40,17 @@ static common_params            * g_params;
 static std::vector<llama_token> * g_input_tokens;
 static std::ostringstream       * g_output_ss;
 static std::vector<llama_token> * g_output_tokens;
+uint64_t times = 0;
+uint64_t warm_up = 20;
 static bool is_interacting  = false;
 static bool need_insert_eot = false;
+uint64_t crz = 0;
+uint64_t read_cycle() {
+	uint64_t cycles;
+	asm volatile("rdcycle %0" : "=r"(cycles));
+	return cycles;
+  }
+  
 
 static void print_usage(int argc, char ** argv) {
     (void) argc;
@@ -544,8 +555,108 @@ int main(int argc, char ** argv) {
         embd_inp.clear();
         embd_inp.push_back(decoder_start_token_id);
     }
-
+	auto init = read_cycle();
     while ((n_remain != 0 && !is_antiprompt) || params.interactive) {
+
+		times++;
+		if (times>warm_up && (times-warm_up)%100==0){
+			crz = read_cycle() - init;
+			LLAMA_LOG_INFO("\n\nround %lu  Riscv Cycle: %lu \n\n", times, crz);
+			common_perf_print(*g_ctx, *g_smpl);
+		}
+		if (times == warm_up){
+			init = read_cycle();
+		}
+		// check for user input
+		if (params.interactive) {
+			if (is_interacting) {
+				if (params.multiline_input) {
+					LOG_INF(">> ");
+				} else {
+					LOG_INF("\n>> ");
+				}
+			} else {
+				if (params.multiline_input) {
+					LOG_INF("<< ");
+				} else {
+					LOG_INF("\n<< ");
+				}
+			}
+
+			std::string line;
+			std::getline(std::cin, line);
+
+			if (line.empty()) {
+				continue;
+			}
+
+			// check for reverse prompt in the last n_prev tokens
+			if (!params.antiprompt.empty()) {
+				is_antiprompt = false;
+				for (auto token : antiprompt_token) {
+					if (token == line[0]) {
+						is_antiprompt = true;
+						break;
+					}
+				}
+			}
+
+			// check for end of input
+			if (line == "exit" || line == "quit") {
+				break;
+			}
+
+			// check for end of input
+			if (line == "stop") {
+				is_interacting = false;
+				need_insert_eot = true;
+				continue;
+			}
+
+			// check for end of input
+			if (line == "clear") {
+				is_interacting = false;
+				need_insert_eot = true;
+				continue;
+			}
+
+			// check for end of input
+			if (line == "reset") {
+				is_interacting = false;
+				need_insert_eot = true;
+				continue;
+			}
+
+			// check for end of input
+			if (line == "help") {
+				is_interacting = false;
+				need_insert_eot = true;
+				continue;
+			}
+
+			// check for end of input
+			if (line == "save") {
+				is_interacting = false;
+				need_insert_eot = true;
+				continue;
+			}
+
+			if (waiting_for_first_input) {
+				embd_inp.clear();
+				embd_inp.push_back(llama_vocab_bos(vocab));
+				waiting_for_first_input = false;
+			}
+
+			if (!params.input_prefix.empty()) {
+				line.insert(0, params.input_prefix);
+			}
+
+			if (!params.input_suffix.empty()) {
+				line.append(params.input_suffix);
+			}
+
+			if (params.input_prefix_bos) {
+		}
         // predict
         if (!embd.empty()) {
             // Note: (n_ctx - 4) here is to match the logic for commandline prompt handling via

@@ -39,5 +39,5 @@ here is some example:
 ${workspaceFolder}/build-riscv/bin/llama-cli -m DeepSeek-R1-Distill-Qwen-1.5B-Q2_K_L.gguf -p "Hello"
 
 # Prompt given by file (better to use when do perf)
-${workspaceFolder}/build-riscv/bin/llama-cli -m DeepSeek-R1-Distill-Qwen-1.5B-Q2_K_L.gguf -f ./prompt.txt
+${workspaceFolder}/build-riscv/bin/llama-cli -m DeepSeek-R1-Distill-Qwen-1.5B-Q2_K_L.gguf -f ./prompt.txt -no-cnv
 ```
